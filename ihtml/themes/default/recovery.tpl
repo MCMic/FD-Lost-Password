@@ -1,7 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
 	"http://www.w3.org/TR/html4/transitional.dtd">
 <html>
-{debug}
+<!-- {debug} -->
 
 <head>
   <title>FusionDirectory - {t}Recovery your password{/t}</title>
@@ -46,15 +46,29 @@
 
 {if $step2}
     <p class="infotext">
-    Aide relative au mot de passe pour le login : {$uid}
+    Aide relative au mot de passe pour le compte lié à l'adresse : {$address_mail}
     </p>
+
     <p class="infotext">
-      Recevoir un lien de réinitialisation du mot de passe à mon adresse e-mail : {$address_mail}
+      M&eacute;thodes possibles :
+     <ul>
+      <li>Recevoir un lien de réinitialisation du mot de passe à votre adresse e-mail : 
 	<input type='submit' name='send'  value='{t}Send{/t}'
                title='{t}Click here to send a reset link{/t}'>
-	<input type='text' id='address_mail' maxlength='60' value='{$address_mail}'>
-	<input type='text' id='uid' maxlength='60' value='{$uid}'>
+	<input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
+	<input type='hidden' id='uid' maxlength='60' value='{$uid}'>
+      </li>
+      {if $other_method}
+      <li>
+         L'option de récupération n'est pas possible ? Validez votre identité en répondant à plusieurs questions relatives à votre compte
+      </li>
+      <li>
+	<font color="red">=>Contacter votre administrateur pour changer votre mot de passe.</font>
+      </li>
+      {/if}
+     </ul>
     </p>
+{elseif $other_metod}
     <p class="infotext">
     L'option de récupération n'est pas possible ? Validez votre identité en répondant à plusieurs questions relatives à votre compte
     {if !$other_method}
@@ -63,7 +77,8 @@
     {/if}
 {elseif $step3}
     <p class="infotext">
-    La procedure pour réinitialiser le mot de passe pour du login {$uid} a été envoyés à l'adresse {$address_mail}, check your mailbox.
+    La procedure pour réinitialiser le mot de passe pour a été envoyés à l'adresse {$address_mail}, check your mailbox.</br>
+    <font color="red">Attention : ce lien n'est valide que 10 minutes.</font>
     </p>
 {elseif $step4}
     <!-- Display SSL warning message on demand -->
@@ -75,7 +90,7 @@
 
 
     <p class="infotext">
-      {t}This dialog provides a simple way to change your password. Enter the current password and the new password (twice) in the fields below and press the 'Change' button.{/t}
+      {t}This dialog provides a simple way to change your password. Enter the new password (twice) in the fields below and press the 'Change' button.{/t}
     </p>
 
     <div class="ruler"></div>
@@ -93,7 +108,7 @@
       <tr>
        <td><label for='uid'>{t}Username{/t}</label></td>
        <td>{if $display_username}
-           <input type='text' name='uid' id='uid' maxlength='40' value='{$uid}' title='{t}Username{/t}' onFocus="nextfield= 'current_password';">
+           <input type='text' name='uid' id='uid' width='60' maxlength='60' value='{$uid}' title='{t}Username{/t}' onFocus="nextfield= 'current_password';">
            {else}
            <i>{$uid}</i>
            {/if}
@@ -120,9 +135,8 @@
 
     <div class="change">                                                                                                                                        
       <input type='submit' name='change' value='{t}Change{/t}' title='{t}Click here to change your password{/t}'>
-      <input type='text' id='address_mail' maxlength='60' value='{$address_mail}'>
-      <input type='text' id='uniq' maxlength='60' value='{$uniq}'>
-      <input type='text' id='tuniq' value='test'>
+      <input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
+      <input type='hidden' id='uniq' maxlength='60' value='{$uniq}'>
       <input type='hidden' id='formSubmit'>                                                                                                                       
     </div>
 {elseif $changed}
@@ -131,7 +145,9 @@
 </div>
 {else}
     <p class="infotext">
-	{t}This dialog provides a simple way to recover your password. Enter the current password and the new password (twice) in the fields below and press the 'Change' button.{/t}
+	{t}Enter your current e-mail address in the field below and press the 'Change' button.{/t}
+	<br/>
+	<strong>{t}=> Use your e-mail in the long format, e.g : John Doe => john.doe@ibcp.fr{/t}</strong>
     </p>
 
     <div class="ruler"></div>
@@ -149,7 +165,7 @@
       <tr>
        <td><label for='mail'>{t}Adresse mail{/t}</label></td>
        <td>
-           <input type='text' name='address_mail' id='address_mail' maxlength='60' value='{$address_mail}' title='{t}Mail{/t}' onFocus="">
+           <input type='text' name='address_mail' id='address_mail' width='60' maxlength='60' value='{$address_mail}' title='{t}Mail{/t}' onFocus="">
        </td>
       </tr>
     </table>

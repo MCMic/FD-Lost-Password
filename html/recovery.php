@@ -29,12 +29,13 @@ $debug = 0;
 /* Allow locked account with an valide end date to activate ? */
 $activate = 1;
 /* IPs allowed to recovery */
+/* => Treated by the webserver */
 $ip = "";
 /* Delay allowed for the user to change his password */
-$delay_allowed = 300;
+$delay_allowed = 600;
 
 /* Sender */
-$from_mail = "cri@ibcp.fr";
+$from_mail = "tobechanged@domain.fr";
 
 /* Destroy old session if exists.
     Else you will get your old session back, if you not logged out correctly. */
@@ -113,7 +114,7 @@ if (isset($_GET['directory']) && isset($servers[$_GET['directory']])){
 } else {
 	$smarty->assign ("server_options", $servers);
 	$smarty->assign ("server_id", $directory);
-	$smarty->assign ("show_directory_chooser", true);
+	$smarty->assign ("show_directory_chooser", false);
 }
 
 /* Set config to selected one */
@@ -169,8 +170,8 @@ elseif (isset($_POST['address_mail']))
   }
 
 
-echo "POST uid :".$_POST['uid']."<br/>";
-echo "GET uid :".$_GET['uid']."<br/>";
+/*echo "POST uid :".$_POST['uid']."<br/>";
+echo "GET uid :".$_GET['uid']."<br/>";*/
 
 /* Check for selected user... */
 if (isset($_GET['uid']) && $_GET['uid'] != ""){
@@ -184,8 +185,8 @@ if (isset($_GET['uid']) && $_GET['uid'] != ""){
 	$smarty->assign('display_username', true);
 }
 
-echo "POST uid :".$_POST['uid']."<br/>";
-echo "GET uid :".$_GET['uid']."<br/>";
+/*echo "POST uid :".$_POST['uid']."<br/>";
+echo "GET uid :".$_GET['uid']."<br/>"; */
 
 $current_password= "";
 
@@ -212,10 +213,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
     if (isset($_POST['send']))
       {
 	/* Send a mail, save information in session and create a very random unique id */
-	echo "step3</br>";
+/*	echo "step3</br>";
 	echo "Adresse Mail : ".$address_mail."<br/>";
 	echo "Uid : ".$uid."<br/>";
-	echo "DN : ".$dn."<br/>";
+	echo "DN : ".$dn."<br/>"; */
 
 	/* Generate a very long random value */
 	$len = 56;
@@ -226,15 +227,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
 	while (strlen($activatecode)<$len+1)
 	  $activatecode.=$base{mt_rand(0,$max)};
 
-	echo "Random Value :".$activatecode."<br/>";
+/*	echo "Random Value :".$activatecode."<br/>"; */
 
 	/* Store it in a ldap with the salt */
 	$temp_password = $salt.$activatecode.$salt;
 	$sha1_temp_password = sha1($temp_password);
-	
+/*	
 	echo "Temp_password : ".$temp_password."<br/>";
 	echo "sha1 => Temp_password : ".$sha1_temp_password."<br/>";
-
+*/
 	/* Store sha1(unique_id) in the sambaLMPassword attribut => the LM hash isn't needed for anything newer then Windows 95. */
 
 	$ldap = $config->get_ldap_link();
@@ -247,7 +248,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
 	  {
 	    $dn = $attrs['dn'];
 
-	    echo "DN : ".$dn."<br/>";
+/*	    echo "DN : ".$dn."<br/>";*/
 	    $ldap->cd($dn);
 
 	    $attrs = array();
@@ -269,16 +270,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
 	    $reinit_link .= "&uid=".$uid;
 	    $reinit_link .= "&address_mail=".$address_mail;
 
-	    echo "link : ". $reinit_link."<br/>";
+/*	    echo "link : ". $reinit_link."<br/>";*/
 
 	    /* Send the mail */
-	    $message = "liens de reinitialisation : ".$reinit_link;
+	    $message = "Bonjour,\n\n";
+	    $message .= "Voici les informations necessaire : \n";
+	    $message .= " - Votre login : ".$uid."\n";
+	    $message .= " - Liens de reinitialisation : ".$reinit_link;
+	    $message .= "\n\n";
+	    $message .= "Attentions, ce lien est valide durant 10 minutes.";
+	    $message .= "\n\n";
+	    $message .= "Le service informatique.";
 
 	    /* From */
 	    $headers = "From: ".$from_mail."\r\n";
 	    $headers .= "Reply-To: ".$from_mail."\r\n";
 
-	      if(mail ($address_mail, "[CNRS IBCP]: recovery password", $message, $headers))
+	      if(mail ($address_mail, "[CNRS IBCP]: liens de réinitialisation", $message, $headers))
 	      {
 		$smarty->assign("step3", true);
 	      }
@@ -294,15 +302,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
     elseif (isset($_POST['change']))
       {
 	/* Some rapid Check */
-	echo "POSTuniq : ".$_GET['uniq']."<br/>";
-	echo "uniq : ".$uniq."<br/>";
+/*	echo "POSTuniq : ".$_GET['uniq']."<br/>";
+	echo "uniq : ".$uniq."<br/>";*/
         $uniq_id_from_mail  = validate($_GET['uniq']);
 
         $temp_uniq_id = $salt.$uniq_id_from_mail.$salt;
         $uniq_id = sha1($temp_uniq_id);
 
-        echo "Temp_password : ".$temp_uniq_id."<br/>";
-        echo "sha1 => Temp_password : ".sha1($temp_uniq_id)."<br/>";
+/*        echo "Temp_password : ".$temp_uniq_id."<br/>";
+        echo "sha1 => Temp_password : ".sha1($temp_uniq_id)."<br/>"; */
 
         /* Retrieve hash from the ldap */
         $ldap = $config->get_ldap_link();
@@ -314,11 +322,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
         $last_time_recovery = $attrs['sambaPwdLastSet'][0];
         $dn = $attrs['dn'];
 
-        echo "LDAP uniq : ".$ldap_uniq_id."<br/>";
+/*        echo "LDAP uniq : ".$ldap_uniq_id."<br/>";
         echo "Last Time Recovery : ".$last_time_recovery."<br/>";
         echo "Time : ".time()."<br/>";
         echo "Strlen : ".strlen($ldap_uniq_id)."<br/>";
-	echo "DN : ".$dn."<br/>";
+	echo "DN : ".$dn."<br/>";*/
 
         $now =  time();
         /* Same test as previous step */
@@ -359,7 +367,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
 	    else if (strlen($_POST['new_password']) < $MinLength)
 		$message[]= _("The password used as new is to short.");
 
-	    /* IT SEEM THAT CODE IS NOT NEED ! Q&A need to read carefully next line !!
+	    /* IT SEEM THAT CODE IS NOT NEED ! Q&A need to read carefully next lines !!
 	    /* Validate 
 	    if (!tests::is_uid($uid)){
 	      $message[]= msgPool::invalid(_("Login"));
@@ -387,8 +395,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
 		$output= "";
 		if ($config->get_cfg_value("passwordHook") != "")
 		  {
-		    exec($config->get_cfg_value("passwordHook")." ".escapeshellarg($ui->username)." ".
-			 escapeshellarg($_POST['current_password'])." ".escapeshellarg($_POST['new_password']), $resarr);
+		    exec($config->get_cfg_value("passwordHook")." ".escapeshellarg($_POST['new_password']), $resarr);
 		    if(count($resarr) > 0) 
 		      {
 			$output= join('\n', $resarr);
@@ -410,11 +417,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST")
 			change_password ($dn, $_POST['new_password']);
 		      }
 		    gosa_log ("User/password has been changed");
-		    /* TODO a new function */
-		    $message[]= msgPool::invalid(_("User/password has been changed !"));	      
-		    $smarty->assign("step4", false);
-		    $step = 5;
-		    $smarty->assign("changed", true);
+		    /* Send the mail */
+		    $message = "Bonjour,\n\n";
+		    $message .= "Le mot de passe de votre compte vient d'etre change. : \n\n";
+		    $message .= "Pour rappel voici votre login : ".$uid."\n";
+		    $message .= "\n\n";
+		    $message .= "Le service informatique.";
+
+		    /* From */
+		    $headers = "From: ".$from_mail."\r\n";
+		    $headers .= "Reply-To: ".$from_mail."\r\n";
+
+		    if(mail ($address_mail, "[CNRS IBCP]: Confirmation changement de mot de passe", $message, $headers))
+		      {
+ 			gosa_log ("User/password has been changed");
+			/* TODO a new function */
+			/*			$message[]= msgPool::invalid(_("User/password has been changed !"));*/
+			$smarty->assign("step4", false);
+			$step = 5;
+			$smarty->assign("changed", true);
+		      }
 		  }
 	      }
 	  }
@@ -462,7 +484,7 @@ if ($_SERVER["REQUEST_METHOD"] == "GET")
   {
     if (isset($_GET['uniq']))
       {
-	echo "Step 4<br/>";
+/*	echo "Step 4<br/>";*/
 
 	$smarty->assign ('uid', $uid);
 
@@ -474,8 +496,8 @@ if ($_SERVER["REQUEST_METHOD"] == "GET")
         $temp_uniq_id = $salt.$uniq_id_from_mail.$salt;
 	$uniq_id = sha1($temp_uniq_id);
 
-        echo "Temp_password : ".$temp_uniq_id."<br/>";
-        echo "sha1 => Temp_password : ".sha1($temp_uniq_id)."<br/>";
+/*        echo "Temp_password : ".$temp_uniq_id."<br/>";
+        echo "sha1 => Temp_password : ".sha1($temp_uniq_id)."<br/>";*/
 
 	/* Retrieve hash from the ldap */
         $ldap = $config->get_ldap_link();
@@ -486,10 +508,10 @@ if ($_SERVER["REQUEST_METHOD"] == "GET")
         $ldap_uniq_id = $attrs['sambaLMPassword'][0];
         $last_time_recovery = $attrs['sambaPwdLastSet'][0];
 
-	echo "LDAP uniq : ".$ldap_uniq_id."<br/>";
+/*	echo "LDAP uniq : ".$ldap_uniq_id."<br/>";
 	echo "Last Time Recovery : ".$last_time_recovery."<br/>";
 	echo "Time : ".time()."<br/>";
-	echo "Strlen : ".strlen($ldap_uniq_id)."<br/>";
+	echo "Strlen : ".strlen($ldap_uniq_id)."<br/>"; */
 
 	/* Length of the value, has the user really ask for a new password ? */
 	if (strlen($ldap_uniq_id) == 40)
@@ -501,7 +523,7 @@ if ($_SERVER["REQUEST_METHOD"] == "GET")
 		/* a == b ? */
 		if ((strcmp($uniq_id, $ldap_uniq_id) == 0))
 		  {
-		    echo "ok<br/>";
+/*		    echo "ok<br/>";*/
 		    $smarty->assign("step4", true);
 		    $uniq = $uniq_id_from_mail;
 		    $step = 4;
@@ -509,16 +531,16 @@ if ($_SERVER["REQUEST_METHOD"] == "GET")
 		else
 		  {
 		    /* Need to be cleaned by the creation of a real function to display error message */
-		    $message[]= msgPool::invalid(_("Tu triches mon pote, check your link or restart from the beginning !"));
+		    $message[]= msgPool::invalid(_("Check your link or restart from the beginning !"));
 		    $smarty->assign("step1", true);
-		    echo "nok<br/>";
+/*		    echo "nok<br/>";*/
 		  }
 	      }
 	    else
 	      {
 		$message[]= msgPool::invalid(_("You take too much time between the request and the click on the link !"));
 		$smarty->assign("step1", true);
-		echo "nok<br/>";		
+/*		echo "nok<br/>";		*/
 	      }
 	  }
 	else
@@ -526,7 +548,7 @@ if ($_SERVER["REQUEST_METHOD"] == "GET")
 	    /* Need to be cleaned by the creation of a real function to display error message */
 	    $message[]= msgPool::invalid(_("This e-mail never ask for a new password !"));
 	    $smarty->assign("step1", true);
-	    echo "nok<br/>";
+/*	    echo "nok<br/>";*/
 	  }
 
       }
@@ -552,7 +574,7 @@ if (($step == 2) or ($step == 4))
 	$params.= "&amp;$index=".urlencode($$index);
       }
     $params= preg_replace('/^&amp;/', '?', $params);
-    echo $params; 
+/*    echo $params; */
     $smarty->assign('params', $params); 
 
     /* Fill template with required values */
@@ -562,7 +584,7 @@ if (($step == 2) or ($step == 4))
   }
 
 
-echo "uid bis :".$uid."<br/>";
+/*echo "uid bis :".$uid."<br/>"; */
 
 /* Displasy SSL mode warning? */
 if ($ssl != "" && $config->get_cfg_value("warnssl") == 'true'){
