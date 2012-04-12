@@ -5,7 +5,20 @@ require_once("variables.inc");
 
 function displayPWchanger()
 {
-  global $smarty;
+  global $smarty, $error_collector, $error_collector_mailto;
+
+  $smarty->assign("JS", session::global_get('js'));
+  $smarty->assign("PHPSESSID", session_id());
+  if (session::is_set('errors')) {
+    $smarty->assign("errors", session::get('errors'));
+  }
+  if ($error_collector != "") {
+    $smarty->assign("php_errors", preg_replace("/%BUGBODY%/",$error_collector_mailto,$error_collector)."</div>");
+  } else {
+    $smarty->assign("php_errors", "");
+  }
+
+  $smarty->assign("msg_dialogs", msg_dialog::get_dialogs());
 
   $smarty->display(get_template_path('recovery.tpl'));
   exit();
@@ -13,7 +26,7 @@ function displayPWchanger()
 
 function loadConfig()
 {
-  global $_SERVER;
+  global $_SERVER, $BASE_DIR;
 
   /* Check if CONFIG_FILE is accessible */
   if (!is_readable(CONFIG_DIR."/".CONFIG_FILE)) {
@@ -27,8 +40,7 @@ function loadConfig()
   $config = new config(CONFIG_DIR."/".CONFIG_FILE, $BASE_DIR);
   session::global_set('DEBUGLEVEL', $config->get_cfg_value("debuglevel"));
   if ($_SERVER["REQUEST_METHOD"] != "POST") {
-    @DEBUG(DEBUG_CONFIG, __LINE__, __FUNCTION__, __FILE__, $config->data,
-           "config");
+    @DEBUG(DEBUG_CONFIG, __LINE__, __FUNCTION__, __FILE__, $config->data, "config");
   }
   return $config;
 }
@@ -50,6 +62,8 @@ function setupLanguage()
   setlocale(LC_ALL, $lang);
   $GLOBALS['t_language'] = $lang;
   $GLOBALS['t_gettext_message_dir'] = $BASE_DIR.'/locale/';
+
+  @DEBUG(DEBUG_TRACE, __LINE__, __FUNCTION__, __FILE__, $lang,"Setting language to");
 
   /* Set the text domain as 'messages' */
   $domain = 'messages';
@@ -90,7 +104,7 @@ function generateRandomHash()
   return $randomhash;
 }
 
-function storeTempPassword($temp_password)
+function storeToken($temp_password)
 {
   global $config, $address_mail, $delay_allowed;
 
@@ -131,6 +145,78 @@ function storeTempPassword($temp_password)
   return "";
 }
 
+function checkToken($token)
+{
+  $salt_token = $salt.$token.$salt;
+  $sha1_token = sha1($salt_token);
+
+  /* Retrieve hash from the ldap */
+  $ldap = $config->get_ldap_link();
+
+  $ldap->search("(&(objectClass=gosaMailAccount)(mail=".$address_mail.")(uid=".$uid."))",
+                array("sambaLMPassword", "sambaPwdLastSet", "dn"));
+  $attrs = $ldap->fetch();
+
+  $ldap_token = $attrs['sambaLMPassword'][0];
+  $last_time_recovery = $attrs['sambaPwdLastSet'][0];
+  $dn = $attrs['dn'];
+
+  /* Same test as previous step */
+
+  return (($last_time_recovery >= time()) &&
+          ($ldap_token == $sha1_token));
+}
+
+function isValidPassword($current_password,$new_password,$repeated_password)
+{
+  global $config;
+
+  $MinDiffer = $config->get_cfg_value("passwordMinDiffer",0);
+  $MinLength = $config->get_cfg_value("passwordMinLength",0);
+
+  if ($new_password != $repeated_password) {
+    return _("The passwords you've entered as 'New password' and 'Repeated new password' do not match.");
+  } elseif ($new_password == "") {
+    return msgPool::required(_("New password"));
+  } elseif (($MinDiffer > 0) && (substr($current_password, 0, $l) == substr($new_password, 0, $l))) {
+    return _("The password used as new and current are too similar.");
+  } elseif (strlen($new_password) < $MinLength) {
+    return _("The password used as new is to short.");
+  }
+}
+
+function step2()
+{
+  global $config, $message, $smarty, $step;
+
+  /* Ask for the method */
+  if ($_POST['address_mail'] == "") {
+    $message[] = msgPool::required(_("Adresse mail"));
+    return;
+  }
+  $address_mail = $_POST['address_mail'];
+
+  /* Search uid corresponding to the mail */
+  $uids = get_list( "(&(objectClass=gosaMailAccount)(mail=".$address_mail."))",
+                    "", $config->current['BASE'], array("uid"),
+                    GL_SUBSEARCH | GL_NO_ACL_CHECK);
+
+  /* Un seul uid pour le mail given */
+  if (count($uids) < 1) {
+    $message[] = sprintf(_("There is no account using email %s"),$address_mail);
+    return;
+  } elseif (count($uids) > 1) {
+    $message[] = sprintf(_("There are several accounts using email %s"),$address_mail);
+    return;
+  }
+
+  $uid = $uids[0]['uid'][0];
+  $dn = $uids[0]['dn'][0];
+  $smarty->assign("step2", true);
+  $smarty->assign("address_mail", $address_mail);
+  $step = 2;
+}
+
 function step3()
 {
   global $uid, $address_mail, $from_mail, $smarty, $message;
@@ -138,7 +224,7 @@ function step3()
 
   $activatecode = generateRandomHash();
 
-  $error = storeTempPassword($activatecode);
+  $error = storeToken($activatecode);
 
   if (!empty($error)) {
     msg_dialog::display(_("LDAP error"), $error);
@@ -167,6 +253,69 @@ function step3()
     } else {
       $message[] = msgPool::invalid(_("Contact your administrator : check your mail serveur"));
     }
+  }
+}
+
+function step4()
+{
+  global $config, $smarty, $step;
+
+  $uniq_id_from_mail = validate($_GET['uniq']); //FIXME : GET?
+
+  if (!checkToken($uniq_id_from_mail)) {
+    /* TODO a new function */
+    $message[] = msgPool::invalid(_(".... BAD !"));
+    return;
+  }
+
+  $smarty->assign("step4", true);
+  $smarty->assign('uniq', $uniq_id_from_mail);
+  $step = 4;
+
+  /* Do new and repeated password fields match? */
+  $error = isValidPassword( $_POST['current_password'],
+                            $_POST['new_password'],
+                            $_POST['new_password_repeated']);
+  if (!empty($error)) {
+    $message[] = $error;
+    return;
+  }
+
+  /* Passed quality check, just try to change the password now */
+  if ($config->get_cfg_value("passwordHook") != "") {
+    exec($config->get_cfg_value("passwordHook")." ".
+         escapeshellarg($_POST['new_password']), $resarr);
+    if (count($resarr) > 0) {
+      $message[] = _("External password changer reported a problem: ".join('\n', $resarr));
+      msg_dialog::displayChecks($message);
+      return;
+    }
+  }
+  if ($method != "") {
+    change_password($dn, $_POST['new_password'], 0, $method);
+  } else {
+    change_password($dn, $_POST['new_password']);
+  }
+  gosa_log("User/password has been changed");
+  /* Send the mail */
+  $message = "Bonjour,\n\n";
+  $message .= "Le mot de passe de votre compte vient d'etre change. : \n\n";
+  $message .= "Pour rappel voici votre login : ".$uid."\n";
+  $message .= "\n\n";
+  $message .= "Le service informatique.";
+
+  /* From */
+  $headers = "From: ".$from_mail."\r\n";
+  $headers .= "Reply-To: ".$from_mail."\r\n";
+
+  if (mail($address_mail,"[CNRS IBCP]: Confirmation changement de mot de passe",
+       $message, $headers)) {
+    gosa_log("User/password has been changed");
+    /* TODO a new function */
+    /*      $message[]= msgPool::invalid(_("User/password has been changed !")); */
+    $smarty->assign("step4", false);
+    $step = 5;
+    $smarty->assign("changed", true);
   }
 }
 
@@ -241,11 +390,6 @@ if (isset($_GET['directory']) && isset($servers[$_GET['directory']])) {
 $config->set_current($directory);
 session::global_set('config', $config);
 
-if ($_SERVER["REQUEST_METHOD"] != "POST") {//FIXME
-  @DEBUG(DEBUG_TRACE, __LINE__, __FUNCTION__, __FILE__, $lang,
-         "Setting language to");
-}
-
 /* Check for SSL connection */
 $ssl = "";
 if (!isset($_SERVER['HTTPS']) || !stristr($_SERVER['HTTPS'], "on")) {
@@ -258,7 +402,7 @@ if (!isset($_SERVER['HTTPS']) || !stristr($_SERVER['HTTPS'], "on")) {
 
 /* If SSL is forced, just forward to the SSL enabled site */
 if ($config->get_cfg_value("forcessl") == 'true' && $ssl != '') {
-  header("Location: $ssl"); //FIXME : line 84 already sent header
+  header("Location: $ssl"); //FIXME : line 324 already sent header
   exit;
 }
 
@@ -305,12 +449,11 @@ $smarty->assign("step3", false);
 $smarty->assign("step4", false);
 $smarty->assign("step5", false);
 
+$message = array();
+$step = 0;
+
 /* Got a formular answer, validate and try to log in */
-/*if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['apply']))*/
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-
-  $message = array();
-
   /* Destroy old sessions, they cause a successfull login to relog again ... */
   if (session::global_is_set('_LAST_PAGE_REQUEST')) {
     session::global_set('_LAST_PAGE_REQUEST', time());
@@ -320,246 +463,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     step3();
     /* Send a mail, save information in session and create a very random unique id */
   } elseif(isset($_POST['change'])) {
-    /* Some rapid Check */
-    $uniq_id_from_mail = validate($_GET['uniq']); //FIXME : GET?
-
-    $temp_uniq_id = $salt.$uniq_id_from_mail.$salt;
-    $uniq_id = sha1($temp_uniq_id);
-
-    /* Retrieve hash from the ldap */
-    $ldap = $config->get_ldap_link();
-
-    $ldap->search("(&(objectClass=gosaMailAccount)(mail=".$address_mail.
-                  ")(uid=".$uid."))", array("sambaLMPassword",
-                                            "sambaPwdLastSet", "dn"));
-    $attrs = $ldap->fetch();
-
-    $ldap_uniq_id = $attrs['sambaLMPassword'][0];
-    $last_time_recovery = $attrs['sambaPwdLastSet'][0];
-    $dn = $attrs['dn'];
-
-/*        echo "LDAP uniq : ".$ldap_uniq_id."<br/>";
-        echo "Last Time Recovery : ".$last_time_recovery."<br/>";
-        echo "Time : ".time()."<br/>";
-        echo "Strlen : ".strlen($ldap_uniq_id)."<br/>";
-  echo "DN : ".$dn."<br/>";*/
-
-    $now = time();
-    /* Same test as previous step */
-
-    if ((strlen($ldap_uniq_id) == 40) and($last_time_recovery >=
-                                          $now) and(strcmp($uniq_id,
-                                                           $ldap_uniq_id) ==
-                                                    0)) {
-      $uniq = $uniq_id_from_mail;
-      $smarty->assign("step4", true);
-      $smarty->assign('uniq', $uniq_id_from_mail);
-      $step = 4;
-
-      if ($config->get_cfg_value("passwordMinDiffer") != "")
-        $MinDiffer = $config->get_cfg_value("passwordMinDiffer");
-      else
-        $MinDiffer = 0;
-
-      if ($config->get_cfg_value("passwordMinLength") != "")
-        $MinLength = $config->get_cfg_value("passwordMinLength");
-      else
-        $MinLength = 0;
-
-      /* Do new and repeated password fields match? */
-      $new_password = $_POST['new_password'];
-      if ($_POST['new_password'] != $_POST['new_password_repeated']) {
-        $message[] =
-          _
-          ("The passwords you've entered as 'New password' and 'Repeated new password' do not match.");
-      } elseif ($_POST['new_password'] == "") {
-        $message[] = msgPool::required(_("New password"));
-      }
-      /* Password policy fulfilled? */
-      elseif (($MinDiffer > 0)
-               and(substr($_POST['current_password'], 0, $l) ==
-                   substr($_POST['new_password'], 0, $l))) {
-        $message[] =
-          _("The password used as new and current are too similar.");
-      } elseif (strlen($_POST['new_password']) < $MinLength)
-        $message[] = _("The password used as new is to short.");
-
-      /* IT SEEM THAT CODE IS NOT NEED ! Q&A need to read carefully next lines !!
-         /* Validate
-         if (!tests::is_uid($uid)){
-         $message[]= msgPool::invalid(_("Login"));
-         } elseif (mb_strlen($_POST["current_password"], 'UTF-8') == 0){
-         $message[]= msgPool::required(_("Current password"));
-         } else {
-
-         /* Do we have the selected user somewhere?
-         $ui= ldap_login_user ($uid, $current_password);
-
-         if ($ui === NULL){
-         $message[]= _("Please check the username/password combination.");
-         } else {
-         $acls = $ui->get_permissions($ui->dn,"users/password");
-         if(!preg_match("/w/i",$acls)){
-         $message[]= _("You have no permissions to change your password.");
-         }
-         }
-         }
-       */
-
-      else {
-        /* Passed quality check, just try to change the password now */
-        $output = "";
-        if ($config->get_cfg_value("passwordHook") != "") {
-          exec($config->get_cfg_value("passwordHook")." ".
-               escapeshellarg($_POST['new_password']), $resarr);
-          if (count($resarr) > 0) {
-            $output = join('\n', $resarr);
-          }
-        }
-        if ($output != "") {
-          $message[] =
-            _("External password changer reported a problem: ".$output);
-          msg_dialog::displayChecks($message);
-        } else {
-          if ($method != "") {
-            change_password($dn, $_POST['new_password'], 0, $method);
-          } else {
-            change_password($dn, $_POST['new_password']);
-          }
-          gosa_log("User/password has been changed");
-          /* Send the mail */
-          $message = "Bonjour,\n\n";
-          $message .=
-            "Le mot de passe de votre compte vient d'etre change. : \n\n";
-          $message .= "Pour rappel voici votre login : ".$uid."\n";
-          $message .= "\n\n";
-          $message .= "Le service informatique.";
-
-          /* From */
-          $headers = "From: ".$from_mail."\r\n";
-          $headers .= "Reply-To: ".$from_mail."\r\n";
-
-          if (mail
-              ($address_mail,
-               "[CNRS IBCP]: Confirmation changement de mot de passe",
-               $message, $headers)) {
-            gosa_log("User/password has been changed");
-            /* TODO a new function */
-            /*      $message[]= msgPool::invalid(_("User/password has been changed !")); */
-            $smarty->assign("step4", false);
-            $step = 5;
-            $smarty->assign("changed", true);
-          }
-        }
-      }
-    } else {
-      /* TODO a new function */
-      $message[] = msgPool::invalid(_(".... BAD !"));
-    }
-  } else {
-    /* Ask for the method */
-    if ($_POST['address_mail'] == "") {
-      $message[] = msgPool::required(_("Adresse mail"));
-    } else {
-      $address_mail = $_POST['address_mail'];
-
-      /*  echo $address_mail; */
-      /* Search uid corresponding to the mail */
-      /* TODO : regarder pour utiliser get_list */
-      $uids =
-        get_sub_list("(&(objectClass=gosaMailAccount)(mail=".$address_mail.
-                     "))", "", array(get_ou("people")),
-                     $config->current['BASE'], array("uid"),
-                     GL_SUBSEARCH | GL_NO_ACL_CHECK);
-      /*print_r($uids); */
-
-      /* Un seul uid pour le mail given */
-      /*echo count($uids); */
-      if (count($uids) == 1) {
-        $uid = $uids[0]['uid'][0];
-        $dn = $uids[0]['dn'][0];
-        $smarty->assign("step2", true);
-        $smarty->assign("address_mail", $address_mail);
-        $step = 2;
-      } else {
-        $message[] = msgPool::invalid(_("Mail"));
-      }
-    }
+    step4(); //FIXME : won't work, GET used
+  } elseif(isset($_POST['apply'])) {
+    step2();
   }
-
-}
-
-if ($_SERVER["REQUEST_METHOD"] == "GET") {
+} elseif ($_SERVER["REQUEST_METHOD"] == "GET") {
   if (isset($_GET['uniq'])) {
-/*  echo "Step 4<br/>";*/
-
-    $smarty->assign('uid', $uid);
-
-    /* Get the uniq */
-    $uniq_id_from_mail = validate($_GET['uniq']);
-
-    $smarty->assign('uniq', $uniq_id_from_mail);
-
-    $temp_uniq_id = $salt.$uniq_id_from_mail.$salt;
-    $uniq_id = sha1($temp_uniq_id);
-
-/*        echo "Temp_password : ".$temp_uniq_id."<br/>";
-        echo "sha1 => Temp_password : ".sha1($temp_uniq_id)."<br/>";*/
-
-    /* Retrieve hash from the ldap */
-    $ldap = $config->get_ldap_link();
-
-    $ldap->search("(&(objectClass=gosaMailAccount)(mail=".$address_mail.
-                  ")(uid=".$uid."))", array("sambaLMPassword",
-                                            "sambaPwdLastSet"));
-    $attrs = $ldap->fetch();
-
-    $ldap_uniq_id = $attrs['sambaLMPassword'][0];
-    $last_time_recovery = $attrs['sambaPwdLastSet'][0];
-
-/*  echo "LDAP uniq : ".$ldap_uniq_id."<br/>";
-  echo "Last Time Recovery : ".$last_time_recovery."<br/>";
-  echo "Time : ".time()."<br/>";
-  echo "Strlen : ".strlen($ldap_uniq_id)."<br/>"; */
-
-    /* Length of the value, has the user really ask for a new password ? */
-    if (strlen($ldap_uniq_id) == 40) {
-      $now = time();
-      /* Time between the request and the action need to be inferior to delay */
-      if ($last_time_recovery >= $now) {
-        /* a == b ? */
-        if ((strcmp($uniq_id, $ldap_uniq_id) == 0)) {
-/*        echo "ok<br/>";*/
-          $smarty->assign("step4", true);
-          $uniq = $uniq_id_from_mail;
-          $step = 4;
-        } else {
-          /* Need to be cleaned by the creation of a real function to display error message */
-          $message[] =
-            msgPool::
-            invalid(_("Check your link or restart from the beginning !"));
-          $smarty->assign("step1", true);
-/*        echo "nok<br/>";*/
-        }
-      } else {
-        $message[] =
-          msgPool::
-          invalid(_
-                  ("You take too much time between the request and the click on the link !"));
-        $smarty->assign("step1", true);
-/*    echo "nok<br/>";    */
-      }
-    } else {
-      /* Need to be cleaned by the creation of a real function to display error message */
-      $message[] =
-        msgPool::invalid(_("This e-mail never ask for a new password !"));
-      $smarty->assign("step1", true);
-/*      echo "nok<br/>";*/
-    }
-
+    step4();
   }
 }
-/*&& isset($_POST['apply']))*/
 
 /* Do we need to show error messages? */
 if (count($message) != 0) {
@@ -570,15 +482,13 @@ if (count($message) != 0) {
 /* Parameter fill up */
 $params = "";
 /* Not necessary now */
-/*echo $address_mail;*/
 
-if (($step == 2) or($step == 4)) {
+if (($step == 2) || ($step == 4)) {
   foreach(array('uid', 'method', 'directory', 'address_mail', 'uniq') as
           $index) {
     $params .= "&amp;$index=".urlencode($$index);
   }
   $params = preg_replace('/^&amp;/', '?', $params);
-/*    echo $params; */
   $smarty->assign('params', $params);
 
   /* Fill template with required values */
@@ -587,10 +497,9 @@ if (($step == 2) or($step == 4)) {
   $smarty->assign('password_img', get_template_path('images/password.png'));
 }
 
-/* Displasy SSL mode warning? */
+/* Display SSL mode warning? */
 if ($ssl != "" && $config->get_cfg_value("warnssl") == 'true') {
-  $smarty->assign("ssl",
-                  "<b>"._("Warning").":</b> ".
+  $smarty->assign("ssl","<b>"._("Warning").":</b> ".
                   _("Session will not be encrypted.").
                   " <a style=\"color:red;\" href=\"".htmlentities($ssl).
                   "\"><b>"._("Enter SSL session")."</b></a>!");
@@ -598,20 +507,6 @@ if ($ssl != "" && $config->get_cfg_value("warnssl") == 'true') {
   $smarty->assign("ssl", "");
 }
 
-/* show login screen */
-$smarty->assign("JS", session::global_get('js'));
-$smarty->assign("PHPSESSID", session_id());
-if (session::is_set('errors')) {
-  $smarty->assign("errors", session::get('errors'));;
-}
-if ($error_collector != "") {
-  $smarty->assign("php_errors", $error_collector."</div>");
-} else {
-  $smarty->assign("php_errors", "");
-}
-
-$smarty->assign("msg_dialogs", msg_dialog::get_dialogs());
 displayPWchanger();
 
-?></body > </html >
-// vim:tabstop=2:expandtab:shiftwidth=2:filetype=php:syntax:ruler:
+?>
