@@ -106,7 +106,7 @@ function generateRandomHash()
 
 function storeToken($temp_password)
 {
-  global $config, $address_mail, $delay_allowed;
+  global $config, $address_mail, $delay_allowed, $salt, $uid;
 
   /* Store it in a ldap with the salt */
   $salt_temp_password = $salt.$temp_password.$salt;
@@ -147,6 +147,8 @@ function storeToken($temp_password)
 
 function checkToken($token)
 {
+  global $config, $salt, $uid;
+
   $salt_token = $salt.$token.$salt;
   $sha1_token = sha1($salt_token);
 
@@ -187,7 +189,7 @@ function isValidPassword($current_password,$new_password,$repeated_password)
 
 function step2()
 {
-  global $config, $message, $smarty, $step;
+  global $config, $message, $smarty, $step, $_POST, $uid;
 
   /* Ask for the method */
   if ($_POST['address_mail'] == "") {
@@ -212,14 +214,15 @@ function step2()
 
   $uid = $uids[0]['uid'][0];
   $dn = $uids[0]['dn'][0];
-  $smarty->assign("step2", true);
-  $smarty->assign("address_mail", $address_mail);
+  $smarty->assign('step2', true);
+  $smarty->assign('uid',$uid);
+  $smarty->assign('address_mail', $address_mail);
   $step = 2;
 }
 
 function step3()
 {
-  global $uid, $address_mail, $from_mail, $smarty, $message;
+  global $uid, $address_mail, $from_mail, $smarty, $message, $step;
   /* Send a mail, save information in session and create a very random unique id */
 
   $activatecode = generateRandomHash();
@@ -228,37 +231,39 @@ function step3()
 
   if (!empty($error)) {
     msg_dialog::display(_("LDAP error"), $error);
+    return;
+  }
+
+  $reinit_link = "https://elledap1.ibcp.fr/fusiondirectory/recovery.php"; //FIXME
+  $reinit_link .= "?uniq=".$activatecode;
+  $reinit_link .= "&uid=".$uid;
+  $reinit_link .= "&address_mail=".$address_mail;
+
+  /* Send the mail */
+  $mail_body = "Bonjour,\n\n";
+  $mail_body .= "Voici les informations necessaire : \n";
+  $mail_body .= " - Votre login : ".$uid."\n";
+  $mail_body .= " - Liens de reinitialisation : ".$reinit_link;
+  $mail_body .= "\n\n";
+  $mail_body .= "Attention, ce lien est valide durant 10 minutes.";
+  $mail_body .= "\n\n";
+  $mail_body .= "Le service informatique.";
+
+  /* From */
+  $headers = "From: ".$from_mail."\r\n";
+  $headers .= "Reply-To: ".$from_mail."\r\n";
+
+  if (mail($address_mail, "[CNRS IBCP]: liens de réinitialisation", $mail_body, $headers)) {
+    $smarty->assign("step3", true);
+    $step = 3;
   } else {
-    $reinit_link = "https://elledap1.ibcp.fr/fusiondirectory/recovery.php"; //FIXME
-    $reinit_link .= "?uniq=".$activatecode;
-    $reinit_link .= "&uid=".$uid;
-    $reinit_link .= "&address_mail=".$address_mail;
-
-    /* Send the mail */
-    $mail_body = "Bonjour,\n\n";
-    $mail_body .= "Voici les informations necessaire : \n";
-    $mail_body .= " - Votre login : ".$uid."\n";
-    $mail_body .= " - Liens de reinitialisation : ".$reinit_link;
-    $mail_body .= "\n\n";
-    $mail_body .= "Attention, ce lien est valide durant 10 minutes.";
-    $mail_body .= "\n\n";
-    $mail_body .= "Le service informatique.";
-
-    /* From */
-    $headers = "From: ".$from_mail."\r\n";
-    $headers .= "Reply-To: ".$from_mail."\r\n";
-
-    if (mail($address_mail, "[CNRS IBCP]: liens de réinitialisation", $mail_body, $headers)) {
-      $smarty->assign("step3", true);
-    } else {
-      $message[] = msgPool::invalid(_("Contact your administrator : check your mail serveur"));
-    }
+    $message[] = msgPool::invalid(_("Contact your administrator : check your mail serveur"));
   }
 }
 
 function step4()
 {
-  global $config, $smarty, $step;
+  global $config, $smarty, $step, $uniq;
 
   $uniq_id_from_mail = validate($_GET['uniq']); //FIXME : GET?
 
@@ -268,8 +273,9 @@ function step4()
     return;
   }
 
-  $smarty->assign("step4", true);
+  $smarty->assign('step4', true);
   $smarty->assign('uniq', $uniq_id_from_mail);
+  $uniq = $uniq_id_from_mail;
   $step = 4;
 
   /* Do new and repeated password fields match? */
@@ -308,14 +314,16 @@ function step4()
   $headers = "From: ".$from_mail."\r\n";
   $headers .= "Reply-To: ".$from_mail."\r\n";
 
-  if (mail($address_mail,"[CNRS IBCP]: Confirmation changement de mot de passe",
+  $title = _("[FusionDirectory]: Password successfully changed");
+
+  if (mail($address_mail,$title,
        $message, $headers)) {
     gosa_log("User/password has been changed");
     /* TODO a new function */
     /*      $message[]= msgPool::invalid(_("User/password has been changed !")); */
-    $smarty->assign("step4", false);
+    $smarty->assign('step4', false);
     $step = 5;
-    $smarty->assign("changed", true);
+    $smarty->assign('changed', true);
   }
 }
 
@@ -335,9 +343,6 @@ $salt = "phrasetreslongueetcompliquequidoitrestersecrete";
 $debug = 0;
 /* Allow locked account with an valide end date to activate ? */
 $activate = 1;
-/* IPs allowed to recovery */
-/* => Treated by the webserver */
-$ip = "";
 /* Delay allowed for the user to change his password */
 $delay_allowed = 600;
 
@@ -450,7 +455,8 @@ $smarty->assign("step4", false);
 $smarty->assign("step5", false);
 
 $message = array();
-$step = 0;
+$step = 1;
+$uniq = "";
 
 /* Got a formular answer, validate and try to log in */
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -482,6 +488,8 @@ if (count($message) != 0) {
 /* Parameter fill up */
 $params = "";
 /* Not necessary now */
+
+echo "<h1>Step $step</h1>";
 
 if (($step == 2) || ($step == 4)) {
   foreach(array('uid', 'method', 'directory', 'address_mail', 'uniq') as
