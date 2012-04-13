@@ -18,21 +18,17 @@ class passwordRecovery {
 
   /* Salt needed to mask the uniq id in the ldap */
   var $salt = "phrasetreslongueetcompliquequidoitrestersecrete";
-  /* Verbose */
-  var $debug = 0;
-  /* Allow locked account with an valide end date to activate ? */
-  var $activate = 1;
-  /* Delay allowed for the user to change his password */
-  var $delay_allowed = 600;
+  /* Delay allowed for the user to change his password (minutes) */
+  var $delay_allowed = 10;
 
   /* Sender */
   var $from_mail = "tobechanged@domain.fr";
 
-  var $mail_body = "";
+  var $mail_body    = "";
   var $mail_subject = "";
 
-  var $mail2_body = "";
-  var $mail2_subject = "";
+  var $mail2_body     = "";
+  var $mail2_subject  = "";
 
   /* Constructor */
   function passwordRecovery()
@@ -53,6 +49,8 @@ class passwordRecovery {
     reset_errors();
 
     $this->config = $this->loadConfig();
+
+    $this->readLdapConfig();
 
     $this->setupSmarty();
 
@@ -210,6 +208,22 @@ class passwordRecovery {
     return $config;
   }
 
+  /* Check that password recovery is activated, read config in ldap */
+  function readLdapConfig()
+  {
+/*
+    $this->salt           = ;
+    $this->delay_allowed  = ;
+
+    $this->mail_body      = ;
+    $this->mail_subject   = ;
+    $this->mail2_body     = ;
+    $this->mail2_subject  = ;
+
+    $this->from_mail      = ;
+*/
+  }
+
   function setupLanguage()
   {
     global $GLOBALS,$BASE_DIR;
@@ -306,7 +320,7 @@ class passwordRecovery {
                     'objectClass' => array('organizationalUnit'),
                     'ou' => $this->uid,
                     'userPassword' => $sha1_temp_password,
-                    'description' => time() + $this->delay_allowed,
+                    'description' => time() + $this->delay_allowed*60,
                   );
     $ldap->cd($dn);
     if ($add) {
