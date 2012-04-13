@@ -258,6 +258,9 @@ class passwordRecovery {
     $smarty->assign('password_img', get_template_path('images/password.png'));
     $smarty->assign('date', gmdate("D, d M Y H:i:s"));
     $smarty->assign('params', "");
+    $smarty->assign('message', "");
+    $smarty->assign('changed', false);
+    $smarty->assign('other_method', false);
   }
 
   static function generateRandomHash()
