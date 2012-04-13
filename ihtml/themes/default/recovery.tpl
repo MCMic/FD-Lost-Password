@@ -1,35 +1,15 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-  "http://www.w3.org/TR/html4/transitional.dtd">
-<html>
-<!-- {debug} -->
-
-<head>
-  <title>FusionDirectory - {t}Recovery your password{/t}</title>
-
-  <meta name="generator" content="my hands">
-  <meta name="description" content="FusionDirectory - Password recovery">
-  <meta name="author" lang="fr" content="">
-
-  <meta http-equiv="Expires" content="Mon, 26 Jul 1997 05:00:00 GMT">
-  <meta http-equiv="Last-Modified" content="{$date} GMT">
-  <meta http-equiv="Cache-Control" content="no-cache">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Cache-Control" content="post-check=0, pre-check=0">
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
-  <style type="text/css">@import url('themes/default/style.css');</style>
-  <style type="text/css">@import url('themes/default/password-style.css');</style>
-  <link rel="shortcut icon" href="favicon.ico">
-
-  {if isset($ieworkaround)}<script language="javascript"src="include/png.js" type="text/javascript"></script>{/if}
-  <script language="javascript" src="include/prototype.js" type="text/javascript"></script>
-  <script language="javascript" src="include/fusiondirectory.js" type="text/javascript"></script>
-  <script language="javascript" src="include/pwdStrength.js" type="text/javascript"></script>
-</head>
-
 <body style='height:100%; width:100%;'>
 {* FusionDirectory recovery - smarty template *}
 {$php_errors}
+<div>
+    <div class='setup_header'>
+      <div style="float:left;"><img src='themes/default/images/go_logo.png' class='center' alt='FusionDirectory' /></div>
+      <div style="padding-top:8px;text-align:right;height:38px;color:#FFFFFF">{$version}</div>
+    </div>
+      <div class='setup_menu'>
+        <b>{t}FusionDirectory password recovery{/t}</b>
+      </div>
+</div>
 
 <form action='recovery.php{$params}' method='post' name='mainform' onSubmit='js_check(this);return true;'>
     <h1 class='headline'>

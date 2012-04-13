@@ -145,7 +145,7 @@ class passwordRecovery {
         $this->step3();
         /* Send a mail, save information in session and create a very random unique id */
       } elseif(isset($_POST['change'])) {
-        $this->step4(); //FIXME : won't work, GET used
+        $this->step4();
       } elseif(isset($_POST['apply'])) {
         $this->step2();
       }
@@ -181,6 +181,10 @@ class passwordRecovery {
     }
 
     $smarty->assign("msg_dialogs", msg_dialog::get_dialogs());
+    $smarty->assign("usePrototype", "false");
+    $smarty->display (get_template_path('headers.tpl'));
+
+    $smarty->assign("version",FD_VERSION);
 
     $smarty->display(get_template_path('recovery.tpl'));
     exit();
@@ -329,24 +333,27 @@ class passwordRecovery {
 
     $ldap_token = $attrs['sambaLMPassword'][0];
     $last_time_recovery = $attrs['sambaPwdLastSet'][0];
+    $dn = $attrs['dn'][0];
 
     /* Same test as previous step */
 
-    return (($last_time_recovery >= time()) &&
-            ($ldap_token == $sha1_token));
+    if (  ($last_time_recovery >= time()) &&
+          ($ldap_token == $sha1_token)) {
+      return $dn;
+    } else {
+      return FALSE;
+    }
   }
 
-  function isValidPassword($current_password,$new_password,$repeated_password)
+  function isValidPassword($new_password,$repeated_password)
   {
-    $MinDiffer = $this->config->get_cfg_value("passwordMinDiffer",0);
+    //$MinDiffer = $this->config->get_cfg_value("passwordMinDiffer",0);
     $MinLength = $this->config->get_cfg_value("passwordMinLength",0);
 
     if ($new_password != $repeated_password) {
       return _("The passwords you've entered as 'New password' and 'Repeated new password' do not match.");
     } elseif ($new_password == "") {
       return msgPool::required(_("New password"));
-    } elseif (($MinDiffer > 0) && (substr($current_password, 0, $l) == substr($new_password, 0, $l))) {
-      return _("The password used as new and current are too similar.");
     } elseif (strlen($new_password) < $MinLength) {
       return _("The password used as new is to short.");
     }
@@ -486,13 +493,17 @@ class passwordRecovery {
   /* check if the given token is the good one */
   function step4()
   {
-    $uniq_id_from_mail = validate($_GET['uniq']); //FIXME : GET?
+/*
+      la 4 devrait juste afficher les champs de changement de mdp, la 5 devrait être l'étape "on change le mot de passe."
+*/
+    $uniq_id_from_mail = validate($_GET['uniq']);
 
-    if (!checkToken($uniq_id_from_mail)) {
-      /* TODO a new function */
-      $this->message[] = msgPool::invalid(_(".... BAD !"));
+    $dn = $this->checkToken($uniq_id_from_mail);
+    if (!$dn) {
+      $this->message[] = _("This token is invalid");
       return;
     }
+
     $smarty = get_smarty();
 
     $smarty->assign('step4', true);
@@ -500,13 +511,20 @@ class passwordRecovery {
     $this->uniq = $uniq_id_from_mail;
     $this->step = 4;
     $smarty->assign('uid',$this->uid);
-    $params = encodeParams(array('uid', 'method', 'directory', 'address_mail', 'uniq'));
+    $params = $this->encodeParams(array('uid', 'method', 'directory', 'address_mail', 'uniq'));
     $smarty->assign('params', $params);
 
+    if(isset($_POST['change'])) {
+      $this->step5($dn);
+    }
+  }
+
+  /* change the password and send confirmation email */
+  function step5($dn)
+  {
     /* Do new and repeated password fields match? */
-    $error = $this->isValidPassword( $_POST['current_password'],
-                              $_POST['new_password'],
-                              $_POST['new_password_repeated']);
+    $error = $this->isValidPassword( $_POST['new_password'],
+                                     $_POST['new_password_repeated']);
     if (!empty($error)) {
       $this->message[] = $error;
       return;
@@ -527,7 +545,7 @@ class passwordRecovery {
     } else {
       change_password($dn, $_POST['new_password']);
     }
-    gosa_log("User/password has been changed");
+    fusiondirectory_log("User ".$this->uid." password has been changed");
     /* Send the mail */
     $mail_body = sprintf($this->mail2_body,$this->uid);
 
@@ -538,7 +556,7 @@ class passwordRecovery {
     $title = _("[FusionDirectory]: Password successfully changed");
 
     if (mail($this->address_mail,$this->mail2_subject,$mail_body, $headers)) {
-      gosa_log("User/password has been changed");
+      $smarty = get_smarty();
       $smarty->assign('step4', false);
       $this->step = 5;
       $smarty->assign('changed', true);
