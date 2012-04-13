@@ -121,13 +121,10 @@ class passwordRecovery {
     /* Check for selected user... */
     if (isset($_GET['uid']) && $_GET['uid'] != "") {
       $this->uid = validate($_GET['uid']);
-      $smarty->assign('display_username', false);
     } elseif(isset($_POST['uid'])) {
       $this->uid = validate($_POST['uid']);
-      $smarty->assign('display_username', true);
     } else {
       $this->uid = "";
-      $smarty->assign('display_username', true);
     }
 
 
@@ -166,7 +163,7 @@ class passwordRecovery {
       msg_dialog::displayChecks($this->message);
     }
 
-    echo "<h1>Step ".$this->step."</h1>";
+    @DEBUG(DEBUG_TRACE, __LINE__, __FUNCTION__, __FILE__, $this->step,"Step");
 
     $smarty = get_smarty();
 
@@ -186,6 +183,7 @@ class passwordRecovery {
     $smarty->display (get_template_path('headers.tpl'));
 
     $smarty->assign("version",FD_VERSION);
+    $smarty->assign("step",$this->step);
 
     $smarty->display(get_template_path('recovery.tpl'));
     exit();
@@ -257,12 +255,6 @@ class passwordRecovery {
     /* Check for old files in compile directory */
     clean_smarty_compile_dir($smarty->compile_dir);
 
-    $smarty->assign("step1", true);
-    $smarty->assign("step2", false);
-    $smarty->assign("step3", false);
-    $smarty->assign("step4", false);
-    $smarty->assign("step5", false);
-
     $smarty->assign('password_img', get_template_path('images/password.png'));
     $smarty->assign('date', gmdate("D, d M Y H:i:s"));
     $smarty->assign('params', "");
@@ -304,15 +296,22 @@ class passwordRecovery {
     }
 
     $dn = "ou=".$this->uid.",$token";
-    $ldap->cd($dn);
+    $ldap->cat($dn, array('dn'));
+    $add = ($ldap->count() == 0);
     /* We store the token and its validity due date */
-    $ldap->add(array(
-                      'objectClass' => array('organizationalUnit'),
-                      'ou' => $this->uid,
-                      'userPassword' => $sha1_temp_password,
-                      'description' => time() + $this->delay_allowed,
-                    )
-              );
+    $attrs = array(
+                    'objectClass' => array('organizationalUnit'),
+                    'ou' => $this->uid,
+                    'userPassword' => $sha1_temp_password,
+                    'description' => time() + $this->delay_allowed,
+                  );
+    $ldap->cd($dn);
+    if ($add) {
+      $ldap->add($attrs);
+    } else {
+      $ldap->modify($attrs);
+    }
+
     if (!$ldap->success()) {
       return msgPool::ldaperror($ldap->get_error(),
                                 $dn, LDAP_ADD, get_class());
@@ -462,7 +461,6 @@ class passwordRecovery {
     $smarty = get_smarty();
 
     $this->uid = $uids[0]['uid'][0];
-    $smarty->assign('step2', true);
     $smarty->assign('uid',$this->uid);
     $smarty->assign('address_mail', $this->address_mail);
     $this->step = 2;
@@ -500,7 +498,6 @@ class passwordRecovery {
     $headers .= "Reply-To: ".$this->from_mail."\r\n";
 
     if (mail($this->address_mail, $this->mail_subject, $mail_body, $headers)) {
-      $smarty->assign("step3", true);
       $this->step = 3;
     } else {
       $this->message[] = msgPool::invalid(_("Contact your administrator, there was a problem with mail server"));
@@ -520,7 +517,6 @@ class passwordRecovery {
 
     $smarty = get_smarty();
 
-    $smarty->assign('step4', true);
     $smarty->assign('uniq', $uniq_id_from_mail);
     $this->uniq = $uniq_id_from_mail;
     $this->step = 4;
@@ -574,7 +570,6 @@ class passwordRecovery {
 
     if (mail($this->address_mail,$this->mail2_subject,$mail_body, $headers)) {
       $smarty = get_smarty();
-      $smarty->assign('step4', false);
       $this->step = 5;
       $smarty->assign('changed', true);
     }

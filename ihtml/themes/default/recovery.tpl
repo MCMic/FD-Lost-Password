@@ -1,22 +1,32 @@
 <body style='height:100%; width:100%;'>
-{* FusionDirectory recovery - smarty template *}
-{$php_errors}
-<div>
-    <div class='setup_header'>
-      <div style="float:left;"><img src='themes/default/images/go_logo.png' class='center' alt='FusionDirectory' /></div>
-      <div style="padding-top:8px;text-align:right;height:38px;color:#FFFFFF">{$version}</div>
-    </div>
-      <div class='setup_menu'>
-        <b>{t}FusionDirectory password recovery{/t}</b>
+  {* FusionDirectory recovery - smarty template *}
+  {$php_errors}
+  <div>
+      <div class='setup_header'>
+        <div style="float:left;"><img src='themes/default/images/go_logo.png' class='center' alt='FusionDirectory' /></div>
+        <div style="padding-top:8px;text-align:right;height:38px;color:#FFFFFF">{$version}</div>
       </div>
-</div>
+        <div class='setup_menu'>
+          <b>{t}FusionDirectory password recovery{/t}</b>
+        </div>
+  </div>
 
-<form action='recovery.php{$params}' method='post' name='mainform' onSubmit='js_check(this);return true;'>
-    <h1 class='headline'>
-    <img class='center' src='images/password.png' alt='{t}Password{/t}' title='{t}Password{/t}'>
+  <!-- Spacer for some browsers -->
+  <div class='gosaLoginSpacer'></div>
+
+  <div style='float:left; width:25%;'>&nbsp;</div>
+  <div style='float:left; width:50%; border:1px solid #AAAAAA;background-color:white'>
+
+  <form action='recovery.php{$params}' method='post' name='mainform' onSubmit='js_check(this);return true;'>
+
+{$msg_dialogs}
+  <div style='padding:3px; background-color:#F8F8F8;border-bottom:1px solid #AAAAAA'>
+  <p class="center" style="margin:0px 0px 0px 5px;padding:5px;font-size:24px;font-weight:bold;">
+  <img class='center' src='images/password.png' alt='{t}Password{/t}' title='{t}Password{/t}'>
     {t}Lost password{/t}
-    </h1>
-
+  </p>
+  </div>
+  <div style="padding-left:10px;padding-right:10px;">
     <!-- Display SSL warning message on demand -->
     <p class='warning'> {$ssl} </p>
     <input type='hidden' name='javascript' value='false'/>
@@ -24,51 +34,38 @@
     <!-- Display error message on demand -->
     <p class='warning'> {$message} </p>
 
-{if $step2}
+{if $step==2}
     <p class="infotext">
-    Aide relative au mot de passe pour le compte lié à l'adresse : {$address_mail}
+      {t}Password recovery for email {$address_mail}{/t}
     </p>
 
     <p class="infotext">
-      M&eacute;thodes possibles :
-     <ul>
-      <li>Recevoir un lien de réinitialisation du mot de passe à votre adresse e-mail :
-        <input type='submit' name='send'  value='{t}Send{/t}'
-               title='{t}Click here to send a reset link{/t}'>
-        <input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
-        <input type='hidden' id='uid' maxlength='60' value='{$uid}'>
-      </li>
       {if $other_method}
-      <li>
-         L'option de récupération n'est pas possible ? Validez votre identité en répondant à plusieurs questions relatives à votre compte
-      </li>
-      <li>
-  <font color="red">=>Contacter votre administrateur pour changer votre mot de passe.</font>
-      </li>
+        {t}Available methods{/t}
       {/if}
-     </ul>
+      <ul>
+        <li>{t}Receive by email a link that allows you to reset your password{/t} :
+          <input type='submit' name='send'  value='{t}Send{/t}'
+                 title='{t}Click here to send a reset link{/t}'>
+          <input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
+          <input type='hidden' id='uid' maxlength='60' value='{$uid}'>
+        </li>
+        {if $other_method}
+          <li>
+             Dummy recuperation method
+          </li>
+          <li>
+            <font color="red">{t}If none of the above methods suits you, contact your administrator to change your password{/t}</font>
+          </li>
+        {/if}
+      </ul>
     </p>
-{elseif $other_method}
+{elseif $step==3}
     <p class="infotext">
-    L'option de récupération n'est pas possible ? Validez votre identité en répondant à plusieurs questions relatives à votre compte
-    {if !$other_method}
-    <br/><font color="red">=> Cette option n'est pas active, veuillez contacter votre administrateur pour changer votre mot de passe.</font>
+      {t}Informations to reset password for {$uid} have been sent to email address {$address_mail}{/t}<br/>
+      <font color="red">{t}Warning : this email is only valid for 10 minutes.{/t}</font>
     </p>
-    {/if}
-{elseif $step3}
-    <p class="infotext">
-    La procedure pour réinitialiser le mot de passe pour {$uid} a été envoyée à l'adresse {$address_mail}, check your mailbox.</br>
-    <font color="red">Attention : ce lien n'est valide que 10 minutes.</font>
-    </p>
-{elseif $step4}
-    <!-- Display SSL warning message on demand -->
-    <p class='warning'> {$ssl} </p>
-    <input type='hidden' name='javascript' value='false'/>
-
-    <!-- Display error message on demand -->
-    <p class='warning'> {$message} </p>
-
-
+{elseif $step==4}
     <p class="infotext">
       {t}This dialog provides a simple way to change your password. Enter the new password (twice) in the fields below and press the 'Change' button.{/t}
     </p>
@@ -87,11 +84,8 @@
       {/if}
       <tr>
        <td><label for='uid'>{t}Username{/t}</label></td>
-       <td>{if $display_username}
-           <input type='text' name='uid' id='uid' width='60' maxlength='60' value='{$uid}' title='{t}Username{/t}' onFocus="nextfield= 'current_password';">
-           {else}
+       <td>
            <i>{$uid}</i>
-           {/if}
        </td>
       </tr>
       <tr>
@@ -113,21 +107,21 @@
 
     <div class="ruler"></div>
 
-    <div class="change">
+    <div class="change" style="float:right; text-align:right;">
       <input type='submit' name='change' value='{t}Change{/t}' title='{t}Click here to change your password{/t}'>
       <input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
       <input type='hidden' id='uniq' maxlength='60' value='{$uniq}'>
       <input type='hidden' id='formSubmit'>
     </div>
+    <div style="clear:both"></div>
 {elseif $changed}
-<div class='success'">
-  <img class='center' src='images/true.png' alt='{t}Success{/t}' title='{t}Success{/t}'>&nbsp;<b>{t}Your password has been changed successfully.{/t}</b>
-</div>
+    <div class='success'">
+      <img class='center' src='images/true.png' alt='{t}Success{/t}' title='{t}Success{/t}'>&nbsp;<b>{t}Your password has been changed successfully.{/t}</b>
+    </div>
 {else}
     <p class="infotext">
-  {t}Enter your current e-mail address in the field below and press the 'Change' button.{/t}
-  <br/>
-  <strong>{t}=> Use your e-mail in the long format, e.g : John Doe => john.doe@ibcp.fr{/t}</strong>
+      {t}Enter your current e-mail address in the field below and press the 'Change' button.{/t}<br/>
+      <strong>{t}=> Use your e-mail in the long format, e.g : John Doe => john.doe@ibcp.fr{/t}</strong>
     </p>
 
     <div class="ruler"></div>
@@ -149,38 +143,23 @@
        </td>
       </tr>
     </table>
-    <div class="change">
-    <input type='submit' name='apply'  value='{t}Change{/t}'
-                 title='{t}Click here to change your password{/t}'>
-    <input type='hidden' id='formSubmit'>
+    <div class="change" style="float:right; text-align:right;">
+      <input type='submit' name='apply'  value='{t}Change{/t}'
+                   title='{t}Click here to change your password{/t}'>
+      <input type='hidden' id='formSubmit'>
     </div>
+    <div style="clear:both"></div>
 {/if}
-    <!-- check, if cookies are enabled -->
-    <p class='warning'>
-     <script language="JavaScript" type="text/javascript">
-        <!--
-            document.cookie = "gosatest=empty;path=/";
-            if (document.cookie.indexOf( "gosatest=") > -1 )
-                document.cookie = "gosatest=empty;path=/;expires=Thu, 01-Jan-1970 00:00:01 GMT";
-            else
-                document.write("{$cookies}");
-        -->
-     </script>
-    </p>
+  </div>
+  </form>
 
-</form>
-
-{$msg_dialogs}
-
-<table class='iesucks'><tr><td>{$errors}</td></tr></table>
-
-<!-- Place cursor in username field -->
-<script language="JavaScript" type="text/javascript">
-  <!-- // First input field on page
-  focus_field('error_accept','uid','directory', 'username', 'current_password');
-  next_msg_dialog();
-  -->
-</script>
+  <!-- Place cursor in username field -->
+  <script language="JavaScript" type="text/javascript">
+    <!-- // First input field on page
+    focus_field('error_accept','uid','directory', 'username', 'current_password');
+    next_msg_dialog();
+    -->
+  </script>
 
 </body>
 </html>
