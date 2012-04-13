@@ -1,7 +1,5 @@
 <?php
 
-header("Content-type: text/html; charset=UTF-8");
-
 require_once("../include/php_setup.inc");
 require_once("functions.inc");
 require_once("variables.inc");
@@ -583,8 +581,6 @@ class passwordRecovery {
   }
 
 }
-
-echo "<h1>hello</h1>";
 
 $pwRecovery = new passwordRecovery();
 
