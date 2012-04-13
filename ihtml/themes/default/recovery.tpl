@@ -1,5 +1,5 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-	"http://www.w3.org/TR/html4/transitional.dtd">
+  "http://www.w3.org/TR/html4/transitional.dtd">
 <html>
 <!-- {debug} -->
 
@@ -39,7 +39,7 @@
 
     <!-- Display SSL warning message on demand -->
     <p class='warning'> {$ssl} </p>
-    <input type='hidden' name='javascript' value='false'/>		
+    <input type='hidden' name='javascript' value='false'/>
 
     <!-- Display error message on demand -->
     <p class='warning'> {$message} </p>
@@ -52,23 +52,23 @@
     <p class="infotext">
       M&eacute;thodes possibles :
      <ul>
-      <li>Recevoir un lien de réinitialisation du mot de passe à votre adresse e-mail : 
-	<input type='submit' name='send'  value='{t}Send{/t}'
+      <li>Recevoir un lien de réinitialisation du mot de passe à votre adresse e-mail :
+        <input type='submit' name='send'  value='{t}Send{/t}'
                title='{t}Click here to send a reset link{/t}'>
-	<input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
-	<input type='hidden' id='uid' maxlength='60' value='{$uid}'>
+        <input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
+        <input type='hidden' id='uid' maxlength='60' value='{$uid}'>
       </li>
       {if $other_method}
       <li>
          L'option de récupération n'est pas possible ? Validez votre identité en répondant à plusieurs questions relatives à votre compte
       </li>
       <li>
-	<font color="red">=>Contacter votre administrateur pour changer votre mot de passe.</font>
+  <font color="red">=>Contacter votre administrateur pour changer votre mot de passe.</font>
       </li>
       {/if}
      </ul>
     </p>
-{elseif $other_metod}
+{elseif $other_method}
     <p class="infotext">
     L'option de récupération n'est pas possible ? Validez votre identité en répondant à plusieurs questions relatives à votre compte
     {if !$other_method}
@@ -77,7 +77,7 @@
     {/if}
 {elseif $step3}
     <p class="infotext">
-    La procedure pour réinitialiser le mot de passe pour a été envoyés à l'adresse {$address_mail}, check your mailbox.</br>
+    La procedure pour réinitialiser le mot de passe pour {$uid} a été envoyée à l'adresse {$address_mail}, check your mailbox.</br>
     <font color="red">Attention : ce lien n'est valide que 10 minutes.</font>
     </p>
 {elseif $step4}
@@ -97,12 +97,12 @@
     <table>
       {if $show_directory_chooser}
       <tr>
-       <td>{t}Directory{/t}</td>
-       <td>
+        <td>{t}Directory{/t}</td>
+        <td>
           <select name='server'  title='{t}Directory{/t}'>
             {html_options options=$server_options selected=$server_id}
           </select>
-	  </td>
+        </td>
       </tr>
       {/if}
       <tr>
@@ -133,21 +133,21 @@
 
     <div class="ruler"></div>
 
-    <div class="change">                                                                                                                                        
+    <div class="change">
       <input type='submit' name='change' value='{t}Change{/t}' title='{t}Click here to change your password{/t}'>
       <input type='hidden' id='address_mail' maxlength='60' value='{$address_mail}'>
       <input type='hidden' id='uniq' maxlength='60' value='{$uniq}'>
-      <input type='hidden' id='formSubmit'>                                                                                                                       
+      <input type='hidden' id='formSubmit'>
     </div>
 {elseif $changed}
-<div class='success'">                                                                                                                                               
-  <img class='center' src='images/true.png' alt='{t}Success{/t}' title='{t}Success{/t}'>&nbsp;<b>{t}Your password has been changed successfully.{/t}</b>                   
+<div class='success'">
+  <img class='center' src='images/true.png' alt='{t}Success{/t}' title='{t}Success{/t}'>&nbsp;<b>{t}Your password has been changed successfully.{/t}</b>
 </div>
 {else}
     <p class="infotext">
-	{t}Enter your current e-mail address in the field below and press the 'Change' button.{/t}
-	<br/>
-	<strong>{t}=> Use your e-mail in the long format, e.g : John Doe => john.doe@ibcp.fr{/t}</strong>
+  {t}Enter your current e-mail address in the field below and press the 'Change' button.{/t}
+  <br/>
+  <strong>{t}=> Use your e-mail in the long format, e.g : John Doe => john.doe@ibcp.fr{/t}</strong>
     </p>
 
     <div class="ruler"></div>
