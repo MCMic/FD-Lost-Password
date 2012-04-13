@@ -1,4 +1,7 @@
 <?php
+
+header("Content-type: text/html; charset=UTF-8");
+
 require_once("../include/php_setup.inc");
 require_once("functions.inc");
 require_once("variables.inc");
@@ -282,41 +285,42 @@ class passwordRecovery {
 
   function storeToken($temp_password)
   {
-    /* Store it in a ldap with the salt */
+    /* Store it in ldap with the salt */
     $salt_temp_password = $this->salt.$temp_password.$this->salt;
     $sha1_temp_password = sha1($salt_temp_password);
 
-    /* Store sha1(unique_id) in the sambaLMPassword attribut => the LM hash isn't needed for anything newer then Windows 95. */
-
     $ldap = $this->config->get_ldap_link();
 
-    $ldap->search("(&(objectClass=gosaMailAccount)(mail=".$this->address_mail.
-                  ")(uid=".$this->uid."))", array("dn"));
-    $attrs = $ldap->fetch();
-
-    /* This check is a little bit weird */
-    if (count($attrs) != 2) {
-      return _("There is a problem with your account, check parameters !");
+    // Check if token branch is here
+    $token = get_ou("tokenRDN").$this->config->current['BASE'];
+    $ldap->cat($token, array('dn'));
+    if (!$ldap->count()) {
+      /* It's not, let's create it */
+      $ldap->cd ($this->config->current['BASE']);
+      $ldap->create_missing_trees($token);
+      if (!$ldap->success()) {
+        return msgPool::ldaperror($ldap->get_error(),
+                                  $token, LDAP_MOD, get_class());
+      }
+      fusiondirectory_log("Created token branch ".$token);
     }
 
-    $dn = $attrs['dn'];
-
+    $dn = "ou=".$this->uid.",$token";
     $ldap->cd($dn);
-
-    $attrs = array();
-    $attrs['sambaLMPassword'] = $sha1_temp_password;
-    /* Value stocked is the maximum allowed value */
-    $attrs['sambaPwdLastSet'] = time() + $this->delay_allowed;
-
-    $ldap->modify($attrs);
-
+    /* We store the token and its validity due date */
+    $ldap->add(array(
+                      'objectClass' => array('organizationalUnit'),
+                      'ou' => $this->uid,
+                      'userPassword' => $sha1_temp_password,
+                      'description' => time() + $this->delay_allowed,
+                    )
+              );
     if (!$ldap->success()) {
       return msgPool::ldaperror($ldap->get_error(),
-                                $dn,
-                                LDAP_MOD, ERROR_DIALOG);
+                                $dn, LDAP_ADD, get_class());
     }
 
-    return "";
+    return ""; /* Everything went well */
   }
 
   function checkToken($token)
@@ -327,22 +331,17 @@ class passwordRecovery {
     /* Retrieve hash from the ldap */
     $ldap = $this->config->get_ldap_link();
 
-    $ldap->search("(&(objectClass=gosaMailAccount)(mail=".$this->address_mail.")(uid=".$this->uid."))",
-                  array("sambaLMPassword", "sambaPwdLastSet", "dn"));
+    $token = get_ou("tokenRDN").$this->config->current['BASE'];
+    $dn = "ou=".$this->uid.",$token";
+    $ldap->cat($dn);
     $attrs = $ldap->fetch();
 
-    $ldap_token = $attrs['sambaLMPassword'][0];
-    $last_time_recovery = $attrs['sambaPwdLastSet'][0];
-    $dn = $attrs['dn'][0];
+    $ldap_token = $attrs['userPassword'][0];
+    $last_time_recovery = $attrs['description'][0];
 
-    /* Same test as previous step */
-
-    if (  ($last_time_recovery >= time()) &&
-          ($ldap_token == $sha1_token)) {
-      return $dn;
-    } else {
-      return FALSE;
-    }
+    /* Return true if the token match and is still valid */
+    return ($last_time_recovery >= time()) &&
+           ($ldap_token == $sha1_token);
   }
 
   function isValidPassword($new_password,$repeated_password)
@@ -417,6 +416,27 @@ class passwordRecovery {
     return $params;
   }
 
+  function getUserDn()
+  {
+    /* Retrieve dn from the ldap */
+    $ldap = $this->config->get_ldap_link();
+
+    $ldap->cd($this->config->current['BASE']);
+    $ldap->search("(&(objectClass=gosaMailAccount)(uid=".$this->uid."))",array("dn"));
+
+    if($ldap->count() < 1) {
+      $this->message[] = sprintf(_("Did not found account %s"),$this->uid);
+      return;
+    } elseif ($ldap->count() > 1) {
+      $this->message[] = sprintf(_("Found multiple accounts %s"),$this->uid);
+      return;
+    }
+
+    $attrs = $ldap->fetch();
+
+    return $attrs['dn'];
+  }
+
   /* find the uid of for the given email address */
   function step2()
   {
@@ -434,10 +454,10 @@ class passwordRecovery {
 
     /* Only one uid should be found */
     if (count($uids) < 1) {
-      $this->message[] = sprintf(_("There is no account using email %s"),$address_mail);
+      $this->message[] = sprintf(_("There is no account using email %s"),$this->address_mail);
       return;
     } elseif (count($uids) > 1) {
-      $this->message[] = sprintf(_("There are several accounts using email %s"),$address_mail);
+      $this->message[] = sprintf(_("There are several accounts using email %s"),$this->address_mail);
       return;
     }
 
@@ -493,13 +513,9 @@ class passwordRecovery {
   /* check if the given token is the good one */
   function step4()
   {
-/*
-      la 4 devrait juste afficher les champs de changement de mdp, la 5 devrait être l'étape "on change le mot de passe."
-*/
     $uniq_id_from_mail = validate($_GET['uniq']);
 
-    $dn = $this->checkToken($uniq_id_from_mail);
-    if (!$dn) {
+    if (!$this->checkToken($uniq_id_from_mail)) {
       $this->message[] = _("This token is invalid");
       return;
     }
@@ -515,13 +531,17 @@ class passwordRecovery {
     $smarty->assign('params', $params);
 
     if(isset($_POST['change'])) {
-      $this->step5($dn);
+      $this->step5();
     }
   }
 
   /* change the password and send confirmation email */
-  function step5($dn)
+  function step5()
   {
+    $dn = $this->getUserDn();
+    if (!$dn) {
+      return;
+    }
     /* Do new and repeated password fields match? */
     $error = $this->isValidPassword( $_POST['new_password'],
                                      $_POST['new_password_repeated']);
@@ -553,7 +573,6 @@ class passwordRecovery {
     $headers = "From: ".$this->from_mail."\r\n";
     $headers .= "Reply-To: ".$this->from_mail."\r\n";
 
-    $title = _("[FusionDirectory]: Password successfully changed");
 
     if (mail($this->address_mail,$this->mail2_subject,$mail_body, $headers)) {
       $smarty = get_smarty();
@@ -564,6 +583,8 @@ class passwordRecovery {
   }
 
 }
+
+echo "<h1>hello</h1>";
 
 $pwRecovery = new passwordRecovery();
 
