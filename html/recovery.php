@@ -388,7 +388,7 @@ class passwordRecovery {
 
       /* If SSL is forced, just forward to the SSL enabled site */
       if ($this->config->get_cfg_value("forcessl") == 'true') {
-        header("Location: $ssl"); //FIXME : line 324 already sent header
+        header("Location: $ssl");
         exit;
       } elseif ($this->config->get_cfg_value("warnssl") == 'true') {
         /* Display SSL mode warning? */
