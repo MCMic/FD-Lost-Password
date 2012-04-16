@@ -17,28 +17,23 @@ class passwordRecovery {
   /* Some Configuration variable */
 
   /* Salt needed to mask the uniq id in the ldap */
-  var $salt = "phrasetreslongueetcompliquequidoitrestersecrete";
+  var $salt;
   /* Delay allowed for the user to change his password (minutes) */
-  var $delay_allowed = 10;
+  var $delay_allowed;
 
   /* Sender */
-  var $from_mail = "tobechanged@domain.fr";
+  var $from_mail;
 
-  var $mail_body    = "";
-  var $mail_subject = "";
+  var $mail_body;
+  var $mail_subject;
 
-  var $mail2_body     = "";
-  var $mail2_subject  = "";
+  var $mail2_body;
+  var $mail2_subject;
 
   /* Constructor */
   function passwordRecovery()
   {
     global $config;
-    $this->mail_body = _("Hello,\n\nHere are your informations : \n - Login : %s\n - Link : %s\n\nThis link is ony valid for 10 minutes.");
-    $this->mail_subject = _("[FusionDirectory] Password recovery link");
-    $this->mail2_body = _("Hello,\n\nYour password has been changed.\nYour login is still %s\n");
-    $this->mail2_subject = _("[FusionDirectory] Password recovery successful");
-
     /* Destroy old session if exists.
         Else you will get your old session back, if you not logged out correctly. */
     session::destroy();
@@ -50,13 +45,9 @@ class passwordRecovery {
 
     $this->config = $this->loadConfig();
 
-    $this->readLdapConfig();
-
     $this->setupSmarty();
 
     $smarty = get_smarty();
-
-    $this->setupLanguage();
 
     /* Generate server list */
     $servers = array();
@@ -91,6 +82,15 @@ class passwordRecovery {
     $this->config->set_current($this->directory);
     session::global_set('config', $this->config);
     $config = $this->config;
+
+    if (!$this->readLdapConfig()) { /* Password recovery has been disabled */
+      msg_dialog::display(_("Password recovery disabled"),
+                          _("Error: Password recovery has been disabled!"),
+                          FATAL_ERROR_DIALOG);
+      exit();
+    }
+
+    $this->setupLanguage();
 
     $ssl = $this->checkForSSL();
 
@@ -182,6 +182,7 @@ class passwordRecovery {
 
     $smarty->assign("version",FD_VERSION);
     $smarty->assign("step",$this->step);
+    $smarty->assign("delay_allowed",$this->delay_allowed);
 
     $smarty->display(get_template_path('recovery.tpl'));
     exit();
@@ -202,26 +203,33 @@ class passwordRecovery {
     /* Parse configuration file */
     $config = new config(CONFIG_DIR."/".CONFIG_FILE, $BASE_DIR);
     session::global_set('DEBUGLEVEL', $config->get_cfg_value("debuglevel"));
-    if ($_SERVER["REQUEST_METHOD"] != "POST") {
-      @DEBUG(DEBUG_CONFIG, __LINE__, __FUNCTION__, __FILE__, $config->data, "config");
-    }
+    @DEBUG(DEBUG_CONFIG, __LINE__, __FUNCTION__, __FILE__, $config->data, "config");
     return $config;
   }
 
-  /* Check that password recovery is activated, read config in ldap */
+  /* Check that password recovery is activated, read config in ldap
+   * Returns a boolean saying if password recovery is activated
+   */
   function readLdapConfig()
   {
-/*
-    $this->salt           = ;
-    $this->delay_allowed  = ;
+    $ldap = $this->config->get_ldap_link();
+    $token = get_ou("tokenRDN").$this->config->current['BASE'];
+    $dn = "cn=config,$token";
+    $ldap->cat($dn);
+    $attrs = $ldap->fetch();
 
-    $this->mail_body      = ;
-    $this->mail_subject   = ;
-    $this->mail2_body     = ;
-    $this->mail2_subject  = ;
+    $this->salt           = $attrs['passwordRecoverySalt'][0];
+    $this->delay_allowed  = $attrs['passwordRecoveryValidity'][0];
 
-    $this->from_mail      = ;
-*/
+    $this->mail_subject   = $attrs['passwordRecoveryMailSubject'][0];
+    $this->mail_body      = $attrs['passwordRecoveryMailBody'][0];
+    $this->mail2_subject  = $attrs['passwordRecoveryMail2Subject'][0];
+    $this->mail2_body     = $attrs['passwordRecoveryMail2Body'][0];
+
+    $this->from_mail      = $attrs['passwordRecoveryEmail'][0];
+
+    @DEBUG(DEBUG_TRACE, __LINE__, __FUNCTION__, __FILE__, $attrs['passwordRecoveryActivated'][0],"passwordRecoveryActivated");
+    return ($attrs['passwordRecoveryActivated'][0]=="TRUE");
   }
 
   function setupLanguage()

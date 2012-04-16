@@ -63,7 +63,7 @@
 {elseif $step==3}
     <p class="infotext">
       {t}Informations to reset password for {$uid} have been sent to email address {$address_mail}{/t}<br/>
-      <font color="red">{t}Warning : this email is only valid for 10 minutes.{/t}</font>
+      <font color="red">{t}Warning : this email is only valid for {$delay_allowed} minutes.{/t}</font>
     </p>
 {elseif $step==4}
     <p class="infotext">
